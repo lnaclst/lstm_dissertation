@@ -60,11 +60,11 @@ test_batch_size = 1  # this should stay fixed at 1 when using slow test because 
 
 # sequence_length = 800
 # dropout = 0
-prediction_length = 60  # (3 seconds of prediction)
+prediction_length = 2  # (NOT)(3 seconds of prediction)
 shuffle = True
 num_layers = 1
 onset_test_flag = True
-annotations_dir = './data/extracted_annotations/floorholder'
+annotations_dir = './data/extracted_annotations/voice_activity/f'          # Location of files used to train the model
 
 proper_num_args = 2
 print('Number of arguments is: ' + str(len(argv)))
@@ -261,19 +261,25 @@ if 'overlaps' in locals():
         except:
             pass  # Was already closed
 
+### FOR EVALUATION
+
 # Prediction at pauses
 # structure: hold_shift.hdf5/50ms-250ms-500ms/hold_shift-stats/seq_num/g_f_predict/[index,i]
 hold_shift = h5py.File('./data/datasets/hold_shift.hdf5', 'r')
 pause_str_list = ['50ms', '250ms', '500ms']
 length_of_future_window = 20  # (1 second)
 # length_of_past_window = 20    # (1 second)
+floorholder_pause_str_list = ['f50ms', 'f250ms', 'f500ms']
 
-# Floorholder predictions for evaluation
-floorholder = h5py.File('./data/datasets/floorholder.hdf5', 'r')
 
-print(list(floorholder['50ms' + '/floorholder' + '/' + "q4ec7"].keys()))
-print(hold_shift.keys())
-print(floorholder.keys())
+# Floorholder ground truth for evaluation
+# floorholder = h5py.File('./data/datasets/floorholder.hdf5', 'r')
+floorholder_csv_path = './data/extracted_annotations/floorholder'
+
+
+# print(list(floorholder['50ms' + '/floorholder' + '/' + "q4ec7"].keys()))
+# print(hold_shift.keys())
+# print(floorholder.keys())
 
 # Prediction at onsets
 # structure: onsets.hdf5/short_long/seq/g_f/[point_of_prediction,0(short) 1(long)]
@@ -406,7 +412,7 @@ def test():
             # results dict filled with a numpy array of the appropriate batch
             # time indices:  for each window of time, get the time indices stored as descriptors of that batch (??)
             # Using Roddy's parameters, time indices are always at intervals of 600, although the amount of time this equates to varies depending on the modality, yes?
-            print(time_indices)
+            # print(time_indices)
             results_dict[file_name + '/' + g_f_indx][time_indices[0]:time_indices[1]] = out_test[
                 batch_indx].data.cpu().numpy()
             losses_dict[file_name + '/' + g_f_indx][time_indices[0]:time_indices[1]] = loss_no_reduce[
@@ -478,27 +484,37 @@ def test():
     true_vals = list()
     predicted_class = list()
     for conv_key in test_file_list:        # conv_key = conversation
-        for g_f_key in list(floorholder[pause_str + '/floorholder' + '/' + conv_key].keys()):      # 'f' and 'g' distinguish datasets from each other (datasets created in find_pauses.py)
+        for g_f_key in ['f','g']:      # 'f' and 'g' distinguish datasets from each other (datasets created in find_pauses.py)
             g_f_key_not = deepcopy(data_select_dict[data_set_select])
-            g_f_key_not.remove(g_f_key)
-            for frame_indx, true_val in floorholder[pause_str + '/floorholder' + '/' + conv_key + '/' + g_f_key]:
+            g_f_key_not.remove(g_f_key)                                 # Dictionary entry with just the opposite value to g_f_key
+            # for frame_indx, true_val in floorholder[pause_str + '/floorholder' + '/' + conv_key + '/' + g_f_key]:
+            file = conv_key + '.' + g_f_key + '.csv'
+            g_f_true_vals = pd.read_csv('./data/extracted_annotations/floorholder/' + file, header=None)[1][1:]
+            end_idx = len(results_dict[conv_key + '/' + g_f_key])
+            g_f_true_vals = list(map(int,g_f_true_vals[:end_idx]))
+            true_vals.extend(g_f_true_vals)
+                #Lena exp. 1 vvv
+                #Not looking ahead or behind for evaluation. Just looking at the floorholder prediction for the current frame.
+#                         if frame_idx >= length_of_future_window:
+#                 true_vals.append(true_val)
+                # Lena exp. 1 vvv PROBLEM AREA
+                # Shouldn't need to sum this because I'm only creating a binary prediction. Sum is
+                # because Roddy's predictions are 60 items long and we need to determine which is the chosen class
+                # Need a different results dict with size
+            for frame_indx in range(len(true_vals)):
                 # make sure the index is not out of bounds
-                # print(frame_indx, true_val)
                 if frame_indx < len(results_dict[conv_key + '/' + g_f_key]):
-                    #Lena exp. 1 vvv
-                    #Not looking ahead or behind for evaluation. Just looking at the floorholder prediction for the current frame.
-    #                         if frame_idx >= length_of_future_window:
-                    true_vals.append(true_val)
-                    # Lena exp. 1 vvv PROBLEM AREA
-                    # Shouldn't need to sum this because I'm only creating a binary prediction. Sum is
-                    # because Roddy's predictions are 60 items long and we need to determine which is the chosen class
-                    # Need a different results dict with size
                     if np.sum(
                             results_dict[conv_key + '/' + g_f_key][frame_indx, 0]) > np.sum(
                             results_dict[conv_key + '/' + g_f_key_not[0]][frame_indx, 0]):         #compares the predictions for f and g over the whole past window
-                        predicted_class.append(0)      # 0 == g is floorholder
+                        predicted_class.append(1)      # 1 == g is floorholder if conv_key == g
                     else:
-                         predicted_class.append(1)      # 1 == f is floorholder
+                         predicted_class.append(0)      # 0 == f is floorholder if conv_key == g
+        print(true_vals[:10])
+        print(predicted_class[:10])
+        print(len(true_vals))
+        print(len(predicted_class))
+        print(conv_key, file)
     f_score = f1_score(true_vals, predicted_class, average='weighted')
     results_save['f_scores_' + pause_str].append(f_score)
     # set up confusion matrix to get f-scores
@@ -612,7 +628,7 @@ def test():
 
     results_save['test_losses'].append(loss_weighted_mean)
     results_save['test_losses_l1'].append(loss_weighted_mean_l1)
-    print(results_save)
+    # print(results_save)
     #    results_save['test_losses_mse'].append(loss_weighted_mean_mse)
 
     indiv_perf = {'bar_chart_labels': bar_chart_labels,
@@ -629,6 +645,7 @@ embedding_info = train_dataset.get_embedding_info()
 model = LSTMPredictor(lstm_settings_dict=lstm_settings_dict, feature_size_dict=feature_size_dict,
                       batch_size=train_batch_size, seq_length=sequence_length, prediction_length=prediction_length,
                       embedding_info=embedding_info)
+# print('lstm', model.lstm_dict)
 
 model.weights_init(init_std)
 
@@ -683,8 +700,6 @@ for epoch in range(0, num_epochs):
         model.zero_grad()
         model_input = []
 
-        model_input = []
-
         for b_i, bat in enumerate(batch):
             if len(bat) == 0:
                 model_input.append(bat)
@@ -733,29 +748,32 @@ for epoch in range(0, num_epochs):
     results_save['train_losses'].append(np.mean(loss_list))
     # %% Test model
     t_epoch_end = t.time()
-    # model.eval()
-    # test()
+    model.eval()
+    test()
     model.train()
     t_total_end = t.time()
-    #        torch.save(model,)
-    # print(
-    #     '{0} \t Test_loss: {1}\t Train_Loss: {2} \t FScore: {3}  \t Train_time: {4} \t Test_time: {5} \t Total_time: {6}'.format(
-    #         epoch + 1,
-    #         np.round(results_save['test_losses'][-1], 4),
-    #         np.round(np.float64(np.array(loss_list).mean()), 4),
-    #         np.around(results_save['f_scores_500ms'][-1], 4),
-    #         np.round(t_epoch_end - t_epoch_strt, 2),
-    #         np.round(t_total_end - t_epoch_end, 2),
-    #         np.round(t_total_end - t_epoch_strt, 2)))
-    # if (epoch + 1 > patience) and \
-    #         (np.argmin(np.round(results_save['test_losses'], 4)) < (len(results_save['test_losses']) - patience)):
-    #     print('early stopping called at epoch: ' + str(epoch + 1))
-    #     break
+        # torch.save(model)
+    print(results_save.items())
+    #### Lena exp. 1 changing 4s to 0s (all 0s were 4s)
+    # np.around(results_save['f_scores_500ms'][-1], 0),
+    # \t FScore: {3}
+    print(
+        '{0} \t Test_loss: {1}\t Train_Loss: {2} \t Train_time: {3} \t Test_time: {4} \t Total_time: {5}'.format(
+            epoch + 1,
+            np.round(results_save['test_losses'][-1], 4),
+            np.round(np.float64(np.array(loss_list).mean()), 4),
+            np.round(t_epoch_end - t_epoch_strt, 2),
+            np.round(t_total_end - t_epoch_end, 2),
+            np.round(t_total_end - t_epoch_strt, 2)))
+    if (epoch + 1 > patience) and \
+            (np.argmin(np.round(results_save['test_losses'], 4)) < (len(results_save['test_losses']) - patience)):
+        print('early stopping called at epoch: ' + str(epoch + 1))
+        break
 
 # %% Output plots and save results
 if use_date_str:
     result_dir_name = t.strftime('%Y%m%d%H%M%S')[3:]
-    # result_dir_name = result_dir_name + name_append+'_loss_'+str(results_save['test_losses'][np.argmin(np.round(results_save['test_losses'], 4))])[2:6]
+    result_dir_name = result_dir_name + name_append+'_loss_'+str(results_save['test_losses'][np.argmin(np.round(results_save['test_losses'], 4))])[2:6]
 else:
     result_dir_name = name_append
 
@@ -775,7 +793,8 @@ results_save['hidden_nodes_master'] = hidden_nodes_master
 results_save['hidden_nodes_visual'] = hidden_nodes_visual
 results_save['hidden_nodes_acous'] = hidden_nodes_acous
 
-for plot_str in pause_str_list + overlap_str_list + onset_str_list + floorholder_pause_str_list:
+# + floorholder_pause_str_list
+for plot_str in pause_str_list + overlap_str_list + onset_str_list:
     perf_plot(results_save, 'f_scores_' + plot_str)
 
 perf_plot(results_save, 'train_losses')
@@ -786,6 +805,7 @@ plot_person_error(results_save['indiv_perf'][-1]['bar_chart_labels'],
                   results_save['indiv_perf'][-1]['bar_chart_vals'], 'barchart')
 plt.close('all')
 pickle.dump(results_save, open(results_dir + '/' + result_dir_name + '/results.p', 'wb'))
+### MODEL STATES SAVED HERE
 torch.save(model.state_dict(), results_dir + '/' + result_dir_name + '/model.p')
 if len(argv) == proper_num_args:
     json.dump(argv[1], open(results_dir + '/' + result_dir_name + '/settings.json', 'w'), indent=4, sort_keys=True)
