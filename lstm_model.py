@@ -33,7 +33,7 @@ else:
 class LSTMPredictor(nn.Module):
 
     def __init__(self, lstm_settings_dict, feature_size_dict={'acous': 0, 'visual': 0},
-                 batch_size=32, seq_length=200, prediction_length=2, embedding_info=[]):
+                 batch_size=32, seq_length=200, prediction_length=60, embedding_info=[]):
         super(LSTMPredictor, self).__init__()
 
         # General model settings
@@ -154,8 +154,8 @@ class LSTMPredictor(nn.Module):
 
     def init_hidden(self):
         self.hidden_dict = {}
-        for lstm in self.lstm_dict.keys():
-            if self.lstm_settings_dict['is_irregular'][lstm]:
+        for lstm in self.lstm_dict.keys():     # per layer?
+            if self.lstm_settings_dict['is_irregular'][lstm]:        # ONLY ONE LAYER
                 self.hidden_dict[lstm] = (
                 Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype),
                 Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
@@ -164,6 +164,7 @@ class LSTMPredictor(nn.Module):
                     torch.zeros(self.num_layers, self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(
                     dtype), Variable(torch.zeros(
                         self.num_layers, self.batch_size,self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
+            print(self.hidden_dict[lstm][0].size())
 
     def change_batch_size_reset_states(self, batch_size):
         self.batch_size = int(batch_size)
@@ -306,6 +307,7 @@ class LSTMPredictor(nn.Module):
                 h[mod] = self.dropout_dict[str(mod)+'_out'](h[mod])
 
                 h_list.append(h[mod])
+            #############################
             lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](torch.cat(h_list, 2),self.hidden_dict['master'])
             lstm_out = self.dropout_dict['master_out'](lstm_out)
 
@@ -322,9 +324,11 @@ class LSTMPredictor(nn.Module):
 
             cell_out_list = []
             # get outputs of lstm['acous']
+            # print("LSTM, ", lstm_out.size())
+            print("Hidden, ", self.hidden_dict['master'][0].size(), self.hidden_dict['master'][1].size())
             if not (self.lstm_settings_dict['is_irregular'][mod]) and \
                     self.lstm_settings_dict['uses_master_time_rate'][mod]:
-                lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](x[mod], self.hidden_dict['master'])
+                lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](x[mod], self.hidden_dict['master'])        # self.hidden_dict['master'] on the right is a tuple of the input hidden and cell states; on the right is the output hidden and cell states
 
             elif not (self.lstm_settings_dict['is_irregular'][mod]) and not (self.lstm_settings_dict['uses_master_time_rate'][mod]):
                 h_acous_temp, self.hidden_dict['master'] = self.lstm_dict['master'](x[mod],self.hidden_dict['master'])
@@ -368,13 +372,15 @@ class LSTMPredictor(nn.Module):
                             c_l_copy = self.hidden_dict['master'][1].clone()
                             h_l_copy[changed_indices] = h_l
                             c_l_copy[changed_indices] = c_l
-                            self.hidden_dict['master'] = (h_l_copy,c_l_copy)
+                            self.hidden_dict['master'] = (h_l_copy,c_l_copy)        # hidden states/cell states; need to get the right index to call the hidden state?
                             # self.hidden_dict['master'][0][changed_indices] = h_l
                             # self.hidden_dict['master'][1][changed_indices] = c_l
                     cell_out_list.append(self.hidden_dict['master'][0])
-                lstm_out = torch.stack(cell_out_list)
+                lstm_out = torch.stack(cell_out_list)                               # do I want lstm_out or do I want self.hidden_dict['master'][0]???
             else:
                 raise ValueError('problem in forward pass')
+
+            temp_out = cell_out_list[-1]
 
             lstm_out = self.dropout_dict[str(mod)+'_out'](lstm_out)
 
@@ -382,4 +388,6 @@ class LSTMPredictor(nn.Module):
         #Take stacked, dropout-ed hidden layers and run them through a linear layer
         sigmoid_out = self.out(lstm_out)
         
-        return sigmoid_out
+        return sigmoid_out, temp_out
+
+    # lstm

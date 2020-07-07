@@ -60,11 +60,13 @@ test_batch_size = 1  # this should stay fixed at 1 when using slow test because 
 
 # sequence_length = 800
 # dropout = 0
-prediction_length = 2  # (NOT)(3 seconds of prediction)
+prediction_length = 1 # Changed to a 1-frame prediction  # (NOT)(3 seconds of prediction)
 shuffle = True
 num_layers = 1
 onset_test_flag = True
-annotations_dir = './data/extracted_annotations/voice_activity/f'          # Location of files used to train the model
+### Change this for training an f-prediction model or a g-prediction model
+annotations_role = 'fg'                  # Either an empty string or 'fg' if using f or 'gf' if using g
+annotations_dir = './data/extracted_annotations/voice_activity/{}'.format(annotations_role[0])# Location of files used to train the model
 
 proper_num_args = 2
 print('Number of arguments is: ' + str(len(argv)))
@@ -209,7 +211,7 @@ t1 = t.time()
 print('feature dict list:', feature_dict_list)
 #How do I load the true values? How is b[4] the true values? 
 train_dataset = TurnPredictionDataset(feature_dict_list, annotations_dir, train_list_path, sequence_length,
-                                      prediction_length, 'train', data_select=data_set_select)
+                                      prediction_length, 'train', data_select=data_set_select,annotations_key=annotations_role)
 train_dataloader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=shuffle, num_workers=0,
                               drop_last=True, pin_memory=p_memory)
 feature_size_dict = train_dataset.get_feature_size_dict()
@@ -217,13 +219,13 @@ feature_size_dict = train_dataset.get_feature_size_dict()
 if slow_test:
     # slow test loader
     test_dataset = TurnPredictionDataset(feature_dict_list, annotations_dir, test_list_path, sequence_length,
-                                         prediction_length, 'test', data_select=data_set_select)
+                                         prediction_length, 'test', data_select=data_set_select,annotations_key=annotations_role)
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=False,
                                  pin_memory=p_memory)
 else:
     # quick test loader
     test_dataset = TurnPredictionDataset(feature_dict_list, annotations_dir, test_list_path, sequence_length,
-                                         prediction_length, 'train', data_select=data_set_select)
+                                         prediction_length, 'train', data_select=data_set_select,annotations_key=annotations_role)
     test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size, shuffle=True, num_workers=0, drop_last=False)
 
 lstm_settings_dict = train_dataset.get_lstm_settings_dict(lstm_settings_dict)
@@ -794,7 +796,7 @@ results_save['hidden_nodes_visual'] = hidden_nodes_visual
 results_save['hidden_nodes_acous'] = hidden_nodes_acous
 
 # + floorholder_pause_str_list
-for plot_str in pause_str_list + overlap_str_list + onset_str_list:
+for plot_str in floorholder_pause_str_list + overlap_str_list + onset_str_list:
     perf_plot(results_save, 'f_scores_' + plot_str)
 
 perf_plot(results_save, 'train_losses')
