@@ -16,24 +16,21 @@ from time import gmtime, strftime
 # import shutil
 from random import randint
 
-from datetime import datetime
-now = datetime.now()
-
 seq_length = 600
 no_subnets = False
 
-experiment_top_path = './two_subnets/{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute)
-py_env =  '/home/lnaclst/miniconda3/envs/slp/bin/python3'
-#plat = platform.linux_distribution()[0]
-#plat = 'not_arch'
-#if plat == 'arch': 
-#    print('platform: arch')
-#    py_env =  '/home/lnaclst/miniconda3/bin/python3'
-#elif plat == 'debian':
-#    py_env = '../../miniconda3/bin/python3'
-#else:
-#    print('platform: '+plat)
-#    py_env='/home/lnaclst/miniconda3/envs/py36/bin/python3'
+experiment_top_path = './two_subnets/'
+
+plat = platform.linux_distribution()[0]
+# plat = 'not_arch'
+if plat == 'arch':
+    print('platform: arch')
+    py_env = '/home/matt/anaconda3/bin/python'
+elif plat == 'debian':
+    py_env = '../../anaconda3/bin/python'
+else:
+    print('platform: ' + plat)
+    py_env = '/home/mroddy/anaconda3/envs/py36/bin/python'
 
 
 # %% Common settings for all experiments
