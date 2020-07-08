@@ -40,6 +40,9 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 #Features:
 import feature_vars as feat_dicts
 
+from datetime import datetime
+now = datetime.now()
+
 # %% data set select
 data_set_select = 0  # 0 for maptask, 1 for mahnob, 2 for switchboard
 if data_set_select == 0:
@@ -65,7 +68,7 @@ shuffle = True
 num_layers = 1
 onset_test_flag = True
 ### Change this for training an f-prediction model or a g-prediction model
-annotations_role = 'fg'                  # Either an empty string or 'fg' if using f or 'gf' if using g
+annotations_role = 'gf'                  # Either an empty string or 'fg' if using f or 'gf' if using g
 annotations_dir = './data/extracted_annotations/voice_activity/{}'.format(annotations_role[0])# Location of files used to train the model
 
 proper_num_args = 2
@@ -491,9 +494,13 @@ def test():
             g_f_key_not.remove(g_f_key)                                 # Dictionary entry with just the opposite value to g_f_key
             # for frame_indx, true_val in floorholder[pause_str + '/floorholder' + '/' + conv_key + '/' + g_f_key]:
             file = conv_key + '.' + g_f_key + '.csv'
-            g_f_true_vals = pd.read_csv('./data/extracted_annotations/floorholder/' + file, header=None)[1][1:]
+            g_f_true_vals = pd.read_csv('./data/extracted_annotations/voice_activity/' + file, header=None)[1][1:]
             end_idx = len(results_dict[conv_key + '/' + g_f_key])
-            g_f_true_vals = list(map(int,g_f_true_vals[:end_idx]))
+            try:
+                g_f_true_vals = list(map(int,g_f_true_vals[:end_idx]))
+            except ValueError:
+                g_f_true_vals = list(map(float, g_f_true_vals[:end_idx]))
+                g_f_true_vals = list(map(int, g_f_true_vals[:end_idx]))
             true_vals.extend(g_f_true_vals)
                 #Lena exp. 1 vvv
                 #Not looking ahead or behind for evaluation. Just looking at the floorholder prediction for the current frame.
@@ -653,7 +660,7 @@ model.weights_init(init_std)
 
 optimizer_list = []
 
-optimizer_list.append( optim.Adam( model.out.parameters(), lr=learning_rate, weight_decay=l2_dict['out'] ) )
+optimizer_list.append(optim.Adam(model.out.parameters(), lr=learning_rate, weight_decay=l2_dict['out'] ) )
 for embed_inf in embedding_info.keys():
     if embedding_info[embed_inf]:
         for embedder in embedding_info[embed_inf]:
@@ -748,6 +755,7 @@ for epoch in range(0, num_epochs):
                     batch_indx].data.cpu().numpy()
 
     results_save['train_losses'].append(np.mean(loss_list))
+
     # %% Test model
     t_epoch_end = t.time()
     model.eval()
@@ -771,6 +779,10 @@ for epoch in range(0, num_epochs):
             (np.argmin(np.round(results_save['test_losses'], 4)) < (len(results_save['test_losses']) - patience)):
         print('early stopping called at epoch: ' + str(epoch + 1))
         break
+
+hidden_embedding = model.hidden_dict['master'][0]
+torch.save(hidden_embedding, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
+
 
 # %% Output plots and save results
 if use_date_str:
@@ -796,8 +808,8 @@ results_save['hidden_nodes_visual'] = hidden_nodes_visual
 results_save['hidden_nodes_acous'] = hidden_nodes_acous
 
 # + floorholder_pause_str_list
-for plot_str in floorholder_pause_str_list + overlap_str_list + onset_str_list:
-    perf_plot(results_save, 'f_scores_' + plot_str)
+# for plot_str in floorholder_pause_str_list + overlap_str_list + onset_str_list:
+#     perf_plot(results_save, 'f_scores_' + plot_str)
 
 perf_plot(results_save, 'train_losses')
 perf_plot(results_save, 'test_losses')

@@ -16,10 +16,13 @@ from time import gmtime, strftime
 # import shutil
 from random import randint
 
+from datetime import datetime
+now = datetime.now()
+
 seq_length = 600
 no_subnets = False
 
-experiment_top_path = './two_subnets/'
+experiment_top_path = './two_subnets/{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute)
 py_env =  '/home/lnaclst/miniconda3/envs/slp/bin/python3'
 #plat = platform.linux_distribution()[0]
 #plat = 'not_arch'

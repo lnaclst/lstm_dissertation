@@ -9,7 +9,9 @@ import torch.nn.functional as F
 # import torch.multiprocessing as mp
 import numpy as np
 # import asynch_lstm
-
+# from datetime import datetime
+#
+# now = datetime.now()
 
 use_cuda = torch.cuda.is_available()
 
@@ -25,6 +27,9 @@ else:
 
 # # Glove embeddings
 # glove_embed_table =
+
+##### LOAD EMBEDDING #####
+# torch.load(embeddings/<embedding_name>
 
 
 # %% LSTM Class
@@ -253,6 +258,8 @@ class LSTMPredictor(nn.Module):
         h_list = []
         x['acous'], i['acous'], x['visual'], i['visual'] = in_data
 
+        # hidden_return = {}
+
         if not (self.lstm_settings_dict['no_subnets']):
             for mod in self.lstm_settings_dict['active_modalities']:
                 if self.embedding_flags[mod]:
@@ -304,11 +311,15 @@ class LSTMPredictor(nn.Module):
                     raise ValueError('problem in forward pass')
 
                 # apply dropout
-                h[mod] = self.dropout_dict[str(mod)+'_out'](h[mod])
+                h[mod] = self.dropout_dict[str(mod)+'_out'](h[mod])                # h[mod] contains all of the hidden states for the given modality
 
                 h_list.append(h[mod])
+
             #############################
-            lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](torch.cat(h_list, 2),self.hidden_dict['master'])
+            lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](torch.cat(h_list, 2),self.hidden_dict['master'])        # Puts the outputs of the sub-LSTM through the master LSTM, h_list being the hidden states from each of the modalities and hidden_dict['master'] being the hidden state from the previous master LSTM
+
+            # hidden_return = torch.cat(h_list, 2)[-1]     # Make sure this is the right object and the right index   ## DO NOT USE
+
             lstm_out = self.dropout_dict['master_out'](lstm_out)
 
         else:  # For no subnets...
@@ -380,14 +391,16 @@ class LSTMPredictor(nn.Module):
             else:
                 raise ValueError('problem in forward pass')
 
-            temp_out = cell_out_list[-1]
+            # hidden_return = lstm_out[-1]
 
             lstm_out = self.dropout_dict[str(mod)+'_out'](lstm_out)
 
         # sigmoid_out = F.sigmoid(self.out(lstm_out))
         #Take stacked, dropout-ed hidden layers and run them through a linear layer
         sigmoid_out = self.out(lstm_out)
-        
-        return sigmoid_out, temp_out
+
+        # torch.save(hidden_return, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))  # DO NOT USE
+
+        return sigmoid_out
 
     # lstm
