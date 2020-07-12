@@ -16,21 +16,27 @@ from time import gmtime, strftime
 # import shutil
 from random import randint
 
+from datetime import datetime
+
+now = datetime.now()
+
 seq_length = 600
 no_subnets = False
 
-experiment_top_path = './two_subnets/'
+experiment_top_path = './two_subnets-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute)
+py_env =  '/afs/inf.ed.ac.uk/user/s19/s1983536/miniconda3/bin/python'
 
-plat = platform.linux_distribution()[0]
+
+# plat = platform.linux_distribution()[0]
 # plat = 'not_arch'
-if plat == 'arch':
-    print('platform: arch')
-    py_env = '/home/matt/anaconda3/bin/python'
-elif plat == 'debian':
-    py_env = '../../anaconda3/bin/python'
-else:
-    print('platform: ' + plat)
-    py_env = '/home/mroddy/anaconda3/envs/py36/bin/python'
+# if plat == 'arch':
+#     print('platform: arch')
+#     py_env = '/home/matt/anaconda3/bin/python'
+# elif plat == 'debian':
+#     py_env = '../../anaconda3/bin/python'
+# else:
+#     print('platform: ' + plat)
+#     py_env = '/home/mroddy/anaconda3/envs/py36/bin/python'
 
 
 # %% Common settings for all experiments
@@ -162,34 +168,28 @@ Acous_10ms_Ling_10ms = {
 gpu_select = 0
 test_indices = [0,1,2]
 
+### Backup: extra experiments
+### '1_Acous_50ms_Ling_50ms', feat_dicts.gemaps_50ms_dict_list + feat_dicts.word_reg_dict_list_visual, Acous_50ms_Ling_50ms,
+### '5_Acous_10ms_Ling_10ms', feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_reg_dict_list_10ms_visual, Acous_10ms_Ling_10ms
+### '3_Acous_50ms_Ling_Asynch',  feat_dicts.gemaps_50ms_dict_list + feat_dicts.word_irreg_fast_dict_list,  Acous_50ms_Ling_Asynch,
 experiment_name_list = [
-    '1_Acous_50ms_Ling_50ms',
     '2_Acous_10ms_Ling_50ms',
-    '3_Acous_50ms_Ling_Asynch',
-    '4_Acous_10ms_Ling_Asynch',
-    '5_Acous_10ms_Ling_10ms',
+    '4_Acous_10ms_Ling_Asynch'
 ]
 
 experiment_features_lists = [
-    feat_dicts.gemaps_50ms_dict_list + feat_dicts.word_reg_dict_list_visual,
     feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_reg_dict_list_visual,
-    feat_dicts.gemaps_50ms_dict_list + feat_dicts.word_irreg_fast_dict_list,
-    feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_irreg_fast_dict_list,
-    feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_reg_dict_list_10ms_visual
-
+    feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_irreg_fast_dict_list
 ]
 
 experiment_settings_list = [
-    Acous_50ms_Ling_50ms,
     Acous_10ms_Ling_50ms,
-    Acous_50ms_Ling_Asynch,
-    Acous_10ms_Ling_Asynch,
-    Acous_10ms_Ling_10ms
+    Acous_10ms_Ling_Asynch
 ]
 
-eval_metric_list = ['f_scores_50ms', 'f_scores_250ms', 'f_scores_500ms', 'f_scores_overlap_hold_shift',
-                    'f_scores_overlap_hold_shift_exclusive', 'f_scores_short_long', 'train_losses',
+eval_metric_list = ['f_scores_50ms', 'f_scores_250ms', 'f_scores_500ms', 'train_losses',
                     'test_losses', 'test_losses_l1']
+# 'f_scores_overlap_hold_shift','f_scores_overlap_hold_shift_exclusive', 'f_scores_short_long',
 
 if not (os.path.exists(experiment_top_path)):
     os.mkdir(experiment_top_path)

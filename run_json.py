@@ -65,11 +65,17 @@ shuffle = True
 num_layers = 1
 onset_test_flag = True
 ### Change this for training an f-prediction model or a g-prediction model
-annotations_role = ''                  # Either an empty string or 'fg' if using f or 'gf' if using g
-annotations_dir = './data/extracted_annotations/voice_activity/'      #{}'.format(annotations_role[0])# Location of files used to train the model
+annotations_role = 'fg'                  # Either an empty string or 'fg' if using f or 'gf' if using g
+annotations_dir = './data/extracted_annotations/voice_activity/{}'.format(annotations_role[0])     # Location of files used to train the model
 
 proper_num_args = 2
 print('Number of arguments is: ' + str(len(argv)))
+
+
+# Training or testing embeddings
+use_speaker_embed = False
+embedding_path = 'placeholder'
+
 
 if not (len(argv) == proper_num_args):
     # %% Single run settings (settings when not being called as a subprocess)
@@ -189,9 +195,9 @@ if (plat == 'arch') | (my_node == 'Matthews-MacBook-Pro.local'):
     print('platform: arch')
 else:
     print('platform: ' + str(plat))
-
+#
 use_cuda = torch.cuda.is_available()
-
+#
 print('Use CUDA: ' + str(use_cuda))
 
 if use_cuda:
@@ -446,35 +452,35 @@ def test():
         results_dict[conv_key + '/' + data_select_dict[data_set_select][0]] = np.array(
             results_dict[conv_key + '/' + data_select_dict[data_set_select][0]]).reshape(-1, prediction_length)
 
-    ### Lena exp. 1. Commenting out all but Floorholder eval
-    # # get hold-shift f-scores
-    # for pause_str in pause_str_list:
-    #     print(hold_shift[pause_str + '/hold_shift' + '/' + 'q4nc7']['f'])
-    #     true_vals = list()
-    #     predicted_class = list()
-    #     for conv_key in test_file_list:
-    #         for g_f_key in list(hold_shift[pause_str + '/hold_shift' + '/' + conv_key].keys()):      # 'f' and 'g' distinguish datasets from each other (datasets created in find_pauses.py)
-    #             g_f_key_not = deepcopy(data_select_dict[data_set_select])
-    #             g_f_key_not.remove(g_f_key)                                 # just the g data if g_f_key = f
-    #             for frame_indx, true_val in hold_shift[pause_str + '/hold_shift' + '/' + conv_key + '/' + g_f_key]:
-    #                 # make sure the index is not out of bounds
-    #                 if frame_indx < len(results_dict[conv_key + '/' + g_f_key]):
-    #                     true_vals.append(true_val)
-    #                     if np.sum(
-    #                             results_dict[conv_key + '/' + g_f_key][frame_indx, 0:length_of_future_window]) > np.sum(
-    #                             results_dict[conv_key + '/' + g_f_key_not[0]][frame_indx, 0:length_of_future_window]):         #compares the predictions for f and g over the whole future window
-    #                         predicted_class.append(0)      # 0 == HOLD
-    #                     else:
-    #                         predicted_class.append(1)      # 1 == SHIFT
-    #     f_score = f1_score(true_vals, predicted_class, average='weighted')
-    #     results_save['f_scores_' + pause_str].append(f_score)
-    #     tn, fp, fn, tp = confusion_matrix(true_vals, predicted_class).ravel()
-    #     results_save['tn_' + pause_str].append(tn)
-    #     results_save['fp_' + pause_str].append(fp)
-    #     results_save['fn_' + pause_str].append(fn)
-    #     results_save['tp_' + pause_str].append(tp)
-    #     print('majority vote f-score(' + pause_str + '):' + str(
-    #         f1_score(true_vals, np.zeros([len(predicted_class)]).tolist(), average='weighted')))
+    ## Lena exp. 1. Commenting out all but Floorholder eval
+    # get hold-shift f-scores
+    for pause_str in pause_str_list:
+        print(hold_shift[pause_str + '/hold_shift' + '/' + 'q4nc7']['f'])
+        true_vals = list()
+        predicted_class = list()
+        for conv_key in test_file_list:
+            for g_f_key in list(hold_shift[pause_str + '/hold_shift' + '/' + conv_key].keys()):      # 'f' and 'g' distinguish datasets from each other (datasets created in find_pauses.py)
+                g_f_key_not = deepcopy(data_select_dict[data_set_select])
+                g_f_key_not.remove(g_f_key)                                 # just the g data if g_f_key = f
+                for frame_indx, true_val in hold_shift[pause_str + '/hold_shift' + '/' + conv_key + '/' + g_f_key]:
+                    # make sure the index is not out of bounds
+                    if frame_indx < len(results_dict[conv_key + '/' + g_f_key]):
+                        true_vals.append(true_val)
+                        if np.sum(
+                                results_dict[conv_key + '/' + g_f_key][frame_indx, 0:length_of_future_window]) > np.sum(
+                                results_dict[conv_key + '/' + g_f_key_not[0]][frame_indx, 0:length_of_future_window]):         #compares the predictions for f and g over the whole future window
+                            predicted_class.append(0)      # 0 == HOLD
+                        else:
+                            predicted_class.append(1)      # 1 == SHIFT
+        f_score = f1_score(true_vals, predicted_class, average='weighted')
+        results_save['f_scores_' + pause_str].append(f_score)
+        tn, fp, fn, tp = confusion_matrix(true_vals, predicted_class).ravel()
+        results_save['tn_' + pause_str].append(tn)
+        results_save['fp_' + pause_str].append(fp)
+        results_save['fn_' + pause_str].append(fn)
+        results_save['tp_' + pause_str].append(tp)
+        print('majority vote f-score(' + pause_str + '):' + str(
+            f1_score(true_vals, np.zeros([len(predicted_class)]).tolist(), average='weighted')))
             
     # get floorholder f-scores
     # Lena exp. 1
@@ -482,55 +488,55 @@ def test():
     ####This requires groud truth data of each speaker's floorholder values for each frame in each conversation. One dset per role. (A vector of f's floorholder values for a convo and a separate vector of g's floorholder values for that convo.) 
     # for pause_str in pause_str_list:
     #Evaluate at pauses
-    print("Floorholder")
-    true_vals = list()
-    predicted_class = list()
-    for conv_key in test_file_list:        # conv_key = conversation
-        for g_f_key in ['f','g']:      # 'f' and 'g' distinguish datasets from each other (datasets created in find_pauses.py)
-            g_f_key_not = deepcopy(data_select_dict[data_set_select])
-            g_f_key_not.remove(g_f_key)                                 # Dictionary entry with just the opposite value to g_f_key
-            # for frame_indx, true_val in floorholder[pause_str + '/floorholder' + '/' + conv_key + '/' + g_f_key]:
-            file = conv_key + '.' + g_f_key + '.csv'
-            g_f_true_vals = pd.read_csv('./data/extracted_annotations/voice_activity/' + file, header=None)[1][1:]
-            end_idx = len(results_dict[conv_key + '/' + g_f_key])
-            try:
-                g_f_true_vals = list(map(int,g_f_true_vals[:end_idx]))
-            except ValueError:
-                g_f_true_vals = list(map(float, g_f_true_vals[:end_idx]))
-                g_f_true_vals = list(map(int, g_f_true_vals[:end_idx]))
-            true_vals.extend(g_f_true_vals)
-                #Lena exp. 1 vvv
-                #Not looking ahead or behind for evaluation. Just looking at the floorholder prediction for the current frame.
-#                         if frame_idx >= length_of_future_window:
-#                 true_vals.append(true_val)
-                # Lena exp. 1 vvv PROBLEM AREA
-                # Shouldn't need to sum this because I'm only creating a binary prediction. Sum is
-                # because Roddy's predictions are 60 items long and we need to determine which is the chosen class
-                # Need a different results dict with size
-            for frame_indx in range(len(true_vals)):
-                # make sure the index is not out of bounds
-                if frame_indx < len(results_dict[conv_key + '/' + g_f_key]):
-                    if np.sum(
-                            results_dict[conv_key + '/' + g_f_key][frame_indx, 0]) > np.sum(
-                            results_dict[conv_key + '/' + g_f_key_not[0]][frame_indx, 0]):         #compares the predictions for f and g over the whole past window
-                        predicted_class.append(1)      # 1 == g is floorholder if conv_key == g
-                    else:
-                         predicted_class.append(0)      # 0 == f is floorholder if conv_key == g
-        print(true_vals[:10])
-        print(predicted_class[:10])
-        print(len(true_vals))
-        print(len(predicted_class))
-        print(conv_key, file)
-    f_score = f1_score(true_vals, predicted_class, average='weighted')
-    results_save['f_scores_' + pause_str].append(f_score)
-    # set up confusion matrix to get f-scores
-    tn, fp, fn, tp = confusion_matrix(true_vals, predicted_class).ravel()
-    results_save['tn_' + pause_str].append(tn)
-    results_save['fp_' + pause_str].append(fp)
-    results_save['fn_' + pause_str].append(fn)
-    results_save['tp_' + pause_str].append(tp)
-    print('majority vote f-score(' + pause_str + '):' + str(
-        f1_score(true_vals, np.zeros([len(predicted_class)]).tolist(), average='weighted')))
+    # print("Floorholder")
+#     true_vals = list()
+#     predicted_class = list()
+#     for conv_key in test_file_list:        # conv_key = conversation
+#         for g_f_key in ['f','g']:      # 'f' and 'g' distinguish datasets from each other (datasets created in find_pauses.py)
+#             g_f_key_not = deepcopy(data_select_dict[data_set_select])
+#             g_f_key_not.remove(g_f_key)                                 # Dictionary entry with just the opposite value to g_f_key
+#             # for frame_indx, true_val in floorholder[pause_str + '/floorholder' + '/' + conv_key + '/' + g_f_key]:
+#             file = conv_key + '.' + g_f_key + '.csv'
+#             g_f_true_vals = pd.read_csv('./data/extracted_annotations/voice_activity/' + file, header=None)[1][1:]
+#             end_idx = len(results_dict[conv_key + '/' + g_f_key])
+#             try:
+#                 g_f_true_vals = list(map(int,g_f_true_vals[:end_idx]))
+#             except ValueError:
+#                 g_f_true_vals = list(map(float, g_f_true_vals[:end_idx]))
+#                 g_f_true_vals = list(map(int, g_f_true_vals[:end_idx]))
+#             true_vals.extend(g_f_true_vals)
+#                 #Lena exp. 1 vvv
+#                 #Not looking ahead or behind for evaluation. Just looking at the floorholder prediction for the current frame.
+# #                         if frame_idx >= length_of_future_window:
+# #                 true_vals.append(true_val)
+#                 # Lena exp. 1 vvv PROBLEM AREA
+#                 # Shouldn't need to sum this because I'm only creating a binary prediction. Sum is
+#                 # because Roddy's predictions are 60 items long and we need to determine which is the chosen class
+#                 # Need a different results dict with size
+#             for frame_indx in range(len(true_vals)):
+#                 # make sure the index is not out of bounds
+#                 if frame_indx < len(results_dict[conv_key + '/' + g_f_key]):
+#                     if np.sum(
+#                             results_dict[conv_key + '/' + g_f_key][frame_indx, 0]) > np.sum(
+#                             results_dict[conv_key + '/' + g_f_key_not[0]][frame_indx, 0]):         #compares the predictions for f and g over the whole past window
+#                         predicted_class.append(1)      # 1 == g is floorholder if conv_key == g
+#                     else:
+#                          predicted_class.append(0)      # 0 == f is floorholder if conv_key == g
+#         print(true_vals[:10])
+#         print(predicted_class[:10])
+#         print(len(true_vals))
+#         print(len(predicted_class))
+#         print(conv_key, file)
+#     f_score = f1_score(true_vals, predicted_class, average='weighted')
+#     results_save['f_scores_' + floorholder_pause_str].append(f_score)
+#     # set up confusion matrix to get f-scores
+#     tn, fp, fn, tp = confusion_matrix(true_vals, predicted_class).ravel()
+#     results_save['tn_' + floorholder_pause_str].append(tn)
+#     results_save['fp_' + floorholder_pause_str].append(fp)
+#     results_save['fn_' + floorholder_pause_str].append(fn)
+#     results_save['tp_' + floorholder_pause_str].append(tp)
+#     print('majority vote f-score(' + floorholder_pause_str + '):' + str(
+#         f1_score(true_vals, np.zeros([len(predicted_class)]).tolist(), average='weighted')))
 
     # # get prediction at onset f-scores
     # # first get best threshold from training data
@@ -650,7 +656,8 @@ embedding_info = train_dataset.get_embedding_info()
 
 model = LSTMPredictor(lstm_settings_dict=lstm_settings_dict, feature_size_dict=feature_size_dict,
                       batch_size=train_batch_size, seq_length=sequence_length, prediction_length=prediction_length,
-                      embedding_info=embedding_info)
+                      embedding_info=embedding_info,speaker_embed = False)
+
 # print('lstm', model.lstm_dict)
 
 model.weights_init(init_std)
@@ -671,7 +678,7 @@ for lstm_key in model.lstm_dict.keys():
 
 
 results_save = dict()
-for pause_str in pause_str_list + overlap_str_list + onset_str_list + floorholder_pause_str_list:
+for pause_str in pause_str_list:   # + overlap_str_list + onset_str_list + floorholder_pause_str_list:
     results_save['f_scores_' + pause_str] = list()
     results_save['tn_' + pause_str] = list()
     results_save['fp_' + pause_str] = list()
@@ -682,6 +689,11 @@ results_save['train_losses'], results_save['test_losses'], results_save['indiv_p
 
 
 # %% Training
+if use_speaker_embed:       # If training embeddings
+    trained_embeddings = torch.load(embedding_path)  # Change this so it loads trained embeddings
+else:
+    embeddings = []
+
 for epoch in range(0, num_epochs):
     model.train()
     t_epoch_strt = t.time()
@@ -700,6 +712,8 @@ for epoch in range(0, num_epochs):
                 train_results_dict[file_name + '/' + g_f] = np.zeros(
                     [train_results_lengths[file_name], prediction_length])
                 train_results_dict[file_name + '/' + g_f][:] = np.nan
+
+    epoch_hidden_states = []          # Get embeddings for each epoch
     for batch_indx, batch in enumerate(train_dataloader):
         # b should be of form: (x,x_i,v,v_i,y,info)
         model.init_hidden()
@@ -723,9 +737,12 @@ for epoch in range(0, num_epochs):
         ##### ?????
         info = batch[5]
         # Prediction
-        print("Model input: ", len(model_input[0]),len(model_input[1]),len(model_input[2]),len(model_input[3]))
 
-        model_output_logits = model(model_input)
+        if use_speaker_embed:
+            my_embedding = trained_embeddings[batch_indx]
+            model_output_logits = model(model_input, my_embedding)
+        else:
+            model_output_logits = model(model_input)
 
         #        model_output_logits = model(model_input[0],model_input[1],model_input[2],model_input[3])
 
@@ -757,6 +774,13 @@ for epoch in range(0, num_epochs):
                 train_results_dict[file_name + '/' + g_f_indx][time_indices[0]:time_indices[1]] = model_output[
                     batch_indx].data.cpu().numpy()
 
+        if not use_speaker_embed:
+            batch_embedding = model.hidden_dict['master'][0]                  # Saving this after the hidden
+            epoch_hidden_states.append(batch_embedding)
+
+    # Save embeddings from each epoch
+    embeddings.append(epoch_hidden_states)
+
     results_save['train_losses'].append(np.mean(loss_list))
 
     # %% Test model
@@ -784,8 +808,10 @@ for epoch in range(0, num_epochs):
         print('Embedding created: {}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
         break
 
-hidden_embedding = model.hidden_dict['master'][0]
-torch.save(hidden_embedding, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
+
+if not use_speaker_embed:                       # If training embeddings
+    embeddings = torch.stack(embeddings[-1])    # Save hidden states from last epoch
+    torch.save(embeddings, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
 
 
 # %% Output plots and save results
