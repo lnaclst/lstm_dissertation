@@ -29,8 +29,13 @@ else:
 # glove_embed_table =
 
 ##### LOAD EMBEDDING #####
-# torch.load(embeddings/<embedding_name>
-
+use_speaker_embed = False
+embeddings = True
+embeddings_lstm = True
+embed1 = torch.load('embeddings/embedding-8-7-22-13-f-.pt')
+embed2 = torch.load('embeddings/embedding-9-7-0-15-g-.pt')
+print("Embedding size: ", embed1.size())
+# embeddings_list = [embed1, embed2]
 
 # %% LSTM Class
 
@@ -44,14 +49,15 @@ class LSTMPredictor(nn.Module):
         # General model settings
         self.batch_size = batch_size
         self.seq_length = seq_length
-        self.feature_size_dict = feature_size_dict
+        self.feature_size_dict = feature_size_dict                 # self.num_feat_for_lstm in data_loader.py
         self.prediction_length = prediction_length
 
         # lstm_settings_dict
         self.lstm_settings_dict = lstm_settings_dict
         self.feature_size_dict['master'] = 0
         if self.lstm_settings_dict['no_subnets']:
-            for act_mod in self.lstm_settings_dict['active_modalities']:
+            for act_mod in self.lstm_settings_dict['active_modalities']:            # active_modalities gets created in the init function of TurnPredictionDataset (under <for feature_dict in self.feature_dict_list>)
+                # from the modalities in the feature_vars dicts that are called  <- (icmi) <- feature-dict-list <- exp-features-lists <- feat-dicts <- (feature_vars.py) <- gemaps-dict-lists
                 self.feature_size_dict['master'] += self.feature_size_dict[act_mod]
         else:
             for act_mod in self.lstm_settings_dict['active_modalities']:
@@ -66,6 +72,9 @@ class LSTMPredictor(nn.Module):
         self.embed_data_types = {'acous': [], 'visual': []}
         self.len_output_of_embeddings = {'acous': 0, 'visual': 0}
         self.embedding_flags = {}
+
+        # my embedding settings
+        self.my_embeddings = []
 
         for modality in self.embedding_info.keys():
             self.embedding_flags[modality] = bool(len(self.embedding_info[modality]))
@@ -109,6 +118,10 @@ class LSTMPredictor(nn.Module):
 
         # Initialize LSTMs
         self.lstm_dict= {}
+        ### Embeddings LSTM ###
+        # if embeddings == True and embeddings_lstm == True:
+        #     self.lstm_dict['embedding'] = nn.LSTM()
+
         if self.lstm_settings_dict['no_subnets']:
             if not (len(self.lstm_settings_dict['active_modalities']) == 1):
                 raise ValueError('Can only have one modality if no subnets')
@@ -126,16 +139,18 @@ class LSTMPredictor(nn.Module):
                                                        self.lstm_settings_dict['hidden_dims']['master']).type(dtype)
                     self.lstm_master = self.lstm_dict['master']
         else:
-            self.lstm_settings_dict['is_irregular']['master'] = False
+            self.lstm_settings_dict['is_irregular']['master'] = False                                       # Master LSTM is regular (meaning 50
             self.lstm_dict['master'] = nn.LSTM(self.feature_size_dict['master'],
-                                               self.lstm_settings_dict['hidden_dims']['master']).type(dtype)
+                                               self.lstm_settings_dict['hidden_dims']['master']).type(dtype)       # Multi-layer LSTM with one layer per element of input
+            print('Dims1: ', self.feature_size_dict['master'])
+            print('Dims2: ', self.lstm_settings_dict['hidden_dims']['master'])
             self.lstm_master = self.lstm_dict['master']
             for lstm in self.lstm_settings_dict['active_modalities']:
                 if self.lstm_settings_dict['is_irregular'][lstm]:
                     # self.lstm_dict[lstm] = nn.LSTMCell(self.feature_size_dict[lstm],
                     #                                    self.lstm_settings_dict['hidden_dims'][lstm]).type(dtype)
                     self.lstm_dict[lstm] = nn.LSTMCell(self.feature_size_dict[lstm],
-                                                       self.lstm_settings_dict['hidden_dims'][lstm]).type(dtype)
+                                                       self.lstm_settings_dict['hidden_dims'][lstm]).type(dtype)    # Single-layer LSTM applied to the input
                     if lstm == 'acous':
                         self.lstm_cell_acous = self.lstm_dict[lstm]
                     else:
@@ -201,7 +216,7 @@ class LSTMPredictor(nn.Module):
         nn.init.normal(self.out.weight.data, 0, init_std)
         nn.init.constant(self.out.bias, 0)
 
-        for lstm in self.lstm_dict.keys():
+        for lstm in self.lstm_dict.keys():                     # Assign values to the keys
             if self.lstm_settings_dict['is_irregular'][lstm]:
                 nn.init.normal(self.lstm_dict[lstm].weight_hh, 0, init_std)
                 nn.init.normal(self.lstm_dict[lstm].weight_ih, 0, init_std)
@@ -244,7 +259,6 @@ class LSTMPredictor(nn.Module):
             for emb_one, emb_two in zip(embeds_one, embeds_two):
                 in_data = torch.cat((in_data, emb_one), 2)
                 in_data = torch.cat((in_data, emb_two), 2)
-
         else:
             for emb_one, emb_two in zip(embeds_one, embeds_two):
                 in_data = torch.cat((in_data, emb_one), 2)
@@ -253,12 +267,24 @@ class LSTMPredictor(nn.Module):
             in_data = in_data[:, :, embed_keep]
         return in_data
 
-    def forward(self, in_data):
+    def forward(self, in_data):          # Is this a single forward step, or is this all of the forward steps?
         x, i, h = {}, {}, {}
         h_list = []
         x['acous'], i['acous'], x['visual'], i['visual'] = in_data
 
-        # hidden_return = {}
+        ### Create concatenable tensors of embeddings
+        embed1_concat_list = []
+        embed2_concat_list = []
+        for seq_indx in range(self.seq_length):
+            embed1_concat_list.append(embed1[0])         # check size, but when stacked, these should be (600, 1, 50)
+            embed2_concat_list.append(embed2[0])         # check size, but when stacked, these should be (600, 1, 50)
+        # torch.stack(embed1_concat_list)
+        # torch.stack(embed2_concat_list)
+        embed1_concat_tensor = torch.stack(embed1_concat_list,0)
+        embed2_concat_tensor = torch.stack(embed2_concat_list,0)
+
+        print(embed1_concat_tensor.size(),embed2_concat_tensor[0].size())
+
 
         if not (self.lstm_settings_dict['no_subnets']):
             for mod in self.lstm_settings_dict['active_modalities']:
@@ -269,14 +295,19 @@ class LSTMPredictor(nn.Module):
                 x[mod] = self.dropout_dict[mod + '_in'](x[mod])
 
                 cell_out_list = []
-                if not(self.lstm_settings_dict['is_irregular'][mod]) and self.lstm_settings_dict['uses_master_time_rate'][mod]:
-                    h[mod], self.hidden_dict[mod] = self.lstm_dict[mod](x[mod], self.hidden_dict[mod])
+                if not(self.lstm_settings_dict['is_irregular'][mod]) and self.lstm_settings_dict['uses_master_time_rate'][mod]:  # not is_irregular: Not asynch; uses_master_time_rate: 50ms
+                    h[mod], self.hidden_dict[mod] = self.lstm_dict[mod](x[mod], self.hidden_dict[mod])                           # call the values of lstm_dict
+                    print('1a')
 
-                elif not (self.lstm_settings_dict['is_irregular'][mod]) and not(self.lstm_settings_dict['uses_master_time_rate'][mod]):
+                elif not (self.lstm_settings_dict['is_irregular'][mod]) and not(self.lstm_settings_dict['uses_master_time_rate'][mod]):  # not is_irregular: Not asynch; not uses_master_time_rate: 10ms
                     h_acous_temp, self.hidden_dict[mod] = self.lstm_dict[mod](x[mod], self.hidden_dict[mod])
                     # h[mod] = h_acous_temp[0::self.lstm_settings_dict['time_step_size'][mod]]
                     h[mod] = h_acous_temp[self.lstm_settings_dict['time_step_size'][mod]-1::self.lstm_settings_dict['time_step_size'][mod]]
-                elif self.lstm_settings_dict['is_irregular'][mod] and self.lstm_settings_dict['uses_master_time_rate'][mod]:
+                    print('2b')
+                # Think it's using this one vvv
+
+                elif self.lstm_settings_dict['is_irregular'][mod] and self.lstm_settings_dict['uses_master_time_rate'][mod]:  # is_irregular: asynch; uses_master_time_rate: 50ms
+                    print('3c')
                     for seq_indx in range(self.seq_length):
                         changed_indices = np.where(i[mod][seq_indx])[0].tolist()
                         if len(changed_indices) > 0:
@@ -292,7 +323,8 @@ class LSTMPredictor(nn.Module):
                     h[mod] = torch.stack(cell_out_list)
 
                 elif bool(self.lstm_settings_dict['is_irregular'][mod]) and not (
-                self.lstm_settings_dict['uses_master_time_rate'][mod]):  # for ling and visual data
+                self.lstm_settings_dict['uses_master_time_rate'][mod]):  # is_irregular: asynch; not uses_master_time_rate: 10ms   # for ling and visual data
+                    print('4d')
                     for seq_indx in range(self.seq_length):
                         for step_indx in range(x[mod].shape[-1]):
                             changed_indices = np.where(i[mod][seq_indx, :, step_indx])[0].tolist()
@@ -314,13 +346,27 @@ class LSTMPredictor(nn.Module):
                 h[mod] = self.dropout_dict[str(mod)+'_out'](h[mod])                # h[mod] contains all of the hidden states for the given modality
 
                 h_list.append(h[mod])
+                # print("Size3: ",h[mod].size())
 
             #############################
-            lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](torch.cat(h_list, 2),self.hidden_dict['master'])        # Puts the outputs of the sub-LSTM through the master LSTM, h_list being the hidden states from each of the modalities and hidden_dict['master'] being the hidden state from the previous master LSTM
 
-            # hidden_return = torch.cat(h_list, 2)[-1]     # Make sure this is the right object and the right index   ## DO NOT USE
+            # for i in range(hidden_tensor.size()[0]):
+            #     print("Size{}".format(i), hidden_tensor[i].size())
+
+            print('Hidden dict:', self.hidden_dict['master'][0].size(),self.hidden_dict['master'][1].size())
+
+            lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](torch.cat(h_list,2),self.hidden_dict['master'])        # Puts the outputs of the sub-LSTM through the master LSTM, h_list being the hidden states from each of the modalities and hidden_dict['master'] being the hidden state from the previous master LSTM
+            print("LSTM_out: ", lstm_out.size())
+            print("Hidden dict transformed: ", self.hidden_dict['master'][0].size())
 
             lstm_out = self.dropout_dict['master_out'](lstm_out)
+            print(type(lstm_out))
+
+            if use_speaker_embed:
+
+                lstm_out = torch.cat((lstm_out,embed1_concat_tensor,embed2_concat_tensor), 2)      # Treats each embedding as a frame in tbptt; could also concatenate the lists created above along the 2nd dimension (1) and input the embeddings at each frame
+
+                print("Embeddings attached to lstm_out.")
 
         else:  # For no subnets...
 
@@ -398,6 +444,8 @@ class LSTMPredictor(nn.Module):
         # sigmoid_out = F.sigmoid(self.out(lstm_out))
         #Take stacked, dropout-ed hidden layers and run them through a linear layer
         sigmoid_out = self.out(lstm_out)
+
+        print("Final size: ", sigmoid_out.size())
 
         # torch.save(hidden_return, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))  # DO NOT USE
 

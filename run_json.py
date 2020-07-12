@@ -46,13 +46,10 @@ now = datetime.now()
 # %% data set select
 data_set_select = 0  # 0 for maptask, 1 for mahnob, 2 for switchboard
 if data_set_select == 0:
-    #    train_batch_size = 878
     train_batch_size = 128
     test_batch_size = 1
 else:
     train_batch_size = 128
-    # train_batch_size = 256
-    #    train_batch_size = 830 # change this
     test_batch_size = 1
 
 # %% Batch settings
@@ -68,8 +65,8 @@ shuffle = True
 num_layers = 1
 onset_test_flag = True
 ### Change this for training an f-prediction model or a g-prediction model
-annotations_role = 'gf'                  # Either an empty string or 'fg' if using f or 'gf' if using g
-annotations_dir = './data/extracted_annotations/voice_activity/{}'.format(annotations_role[0])# Location of files used to train the model
+annotations_role = ''                  # Either an empty string or 'fg' if using f or 'gf' if using g
+annotations_dir = './data/extracted_annotations/voice_activity/'      #{}'.format(annotations_role[0])# Location of files used to train the model
 
 proper_num_args = 2
 print('Number of arguments is: ' + str(len(argv)))
@@ -361,7 +358,7 @@ def test():
         #        for g_f in ['g','f']:
         for g_f in data_select_dict[data_set_select]:
             # create new arrays for the results
-            results_dict[file_name + '/' + g_f] = np.zeros([results_lengths[file_name], prediction_length])   # Does this automatically use the prediction length set in LSTM model?
+            results_dict[file_name + '/' + g_f] = np.zeros([results_lengths[file_name], prediction_length])
             losses_dict[file_name + '/' + g_f] = np.zeros([results_lengths[file_name], prediction_length])
 
     ### BATCH
@@ -726,11 +723,17 @@ for epoch in range(0, num_epochs):
         ##### ?????
         info = batch[5]
         # Prediction
+        print("Model input: ", len(model_input[0]),len(model_input[1]),len(model_input[2]),len(model_input[3]))
+
         model_output_logits = model(model_input)
 
         #        model_output_logits = model(model_input[0],model_input[1],model_input[2],model_input[3])
 
         # loss = loss_func_BCE(F.sigmoid(model_output_logits), y)
+
+        print("Prediction: ", model_output_logits.size())
+        print("Y: ", y.size())
+
         loss = loss_func_BCE_Logit(model_output_logits,y)
         loss_list.append(loss.cpu().data.numpy())
         loss.backward()
@@ -778,6 +781,7 @@ for epoch in range(0, num_epochs):
     if (epoch + 1 > patience) and \
             (np.argmin(np.round(results_save['test_losses'], 4)) < (len(results_save['test_losses']) - patience)):
         print('early stopping called at epoch: ' + str(epoch + 1))
+        print('Embedding created: {}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
         break
 
 hidden_embedding = model.hidden_dict['master'][0]
