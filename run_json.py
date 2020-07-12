@@ -65,11 +65,14 @@ shuffle = True
 num_layers = 1
 onset_test_flag = True
 ### Change this for training an f-prediction model or a g-prediction model
-annotations_role = ''                  # Either an empty string or 'fg' if using f or 'gf' if using g
-annotations_dir = './data/extracted_annotations/voice_activity/'      #{}'.format(annotations_role[0])# Location of files used to train the model
+annotations_role = 'fg'                  # Either an empty string or 'fg' if using f or 'gf' if using g
+annotations_dir = './data/extracted_annotations/voice_activity/{}'.format(annotations_role[0])     # Location of files used to train the model
 
 proper_num_args = 2
 print('Number of arguments is: ' + str(len(argv)))
+
+# Training or testing embeddings
+use_speaker_embed = False
 
 if not (len(argv) == proper_num_args):
     # %% Single run settings (settings when not being called as a subprocess)
@@ -482,7 +485,7 @@ def test():
     ####This requires groud truth data of each speaker's floorholder values for each frame in each conversation. One dset per role. (A vector of f's floorholder values for a convo and a separate vector of g's floorholder values for that convo.) 
     # for pause_str in pause_str_list:
     #Evaluate at pauses
-    print("Floorholder")
+    # print("Floorholder")
     true_vals = list()
     predicted_class = list()
     for conv_key in test_file_list:        # conv_key = conversation
@@ -650,7 +653,8 @@ embedding_info = train_dataset.get_embedding_info()
 
 model = LSTMPredictor(lstm_settings_dict=lstm_settings_dict, feature_size_dict=feature_size_dict,
                       batch_size=train_batch_size, seq_length=sequence_length, prediction_length=prediction_length,
-                      embedding_info=embedding_info)
+                      embedding_info=embedding_info,speaker_embed = False)
+
 # print('lstm', model.lstm_dict)
 
 model.weights_init(init_std)
@@ -682,6 +686,11 @@ results_save['train_losses'], results_save['test_losses'], results_save['indiv_p
 
 
 # %% Training
+if not use_speaker_embed:       # If training embeddings
+    embeddings = []
+else:
+    embeddings = torch.load(embedding_path)             # Change this so it loads trained embeddings
+
 for epoch in range(0, num_epochs):
     model.train()
     t_epoch_strt = t.time()
@@ -723,9 +732,12 @@ for epoch in range(0, num_epochs):
         ##### ?????
         info = batch[5]
         # Prediction
-        print("Model input: ", len(model_input[0]),len(model_input[1]),len(model_input[2]),len(model_input[3]))
 
-        model_output_logits = model(model_input)
+        if use_speaker_embed:
+            my_embedding = embeddings[batch_indx]
+            model_output_logits = model(model_input, my_embedding)
+        else:
+            model_output_logits = model(model_input)
 
         #        model_output_logits = model(model_input[0],model_input[1],model_input[2],model_input[3])
 
@@ -757,6 +769,10 @@ for epoch in range(0, num_epochs):
                 train_results_dict[file_name + '/' + g_f_indx][time_indices[0]:time_indices[1]] = model_output[
                     batch_indx].data.cpu().numpy()
 
+        if not use_speaker_embed:
+            batch_embedding = model.hidden_dict['master'][0]                  # Saving this after the hidden
+            embeddings.append(batch_embedding)
+
     results_save['train_losses'].append(np.mean(loss_list))
 
     # %% Test model
@@ -784,8 +800,10 @@ for epoch in range(0, num_epochs):
         print('Embedding created: {}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
         break
 
-hidden_embedding = model.hidden_dict['master'][0]
-torch.save(hidden_embedding, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
+
+if not use_speaker_embed:       # If training embeddings
+    torch.save(embeddings, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))
+
 
 
 # %% Output plots and save results
