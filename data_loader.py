@@ -940,8 +940,7 @@ class TurnPredictionDataset(Dataset):
                                                                                      embed_info['embedding_out_dim']
                                 self.embedding_info[feature_dict['modality']][-1]['emb_indices'] = [(len(
                                     self.feature_name_list[feature_dict['modality']]), len(
-                                    self.feature_name_list[feature_dict['modality']]) + embed_info[
-                                                                                                         'embedding_in_dim'])]
+                                    self.feature_name_list[feature_dict['modality']]) + embed_info['embedding_in_dim'])]
 
                             for feature_name in feature_dict['features']:
                                 data_f[feature_dict['modality']]['x'][feature_name] = data_f_temp[feature_name]
