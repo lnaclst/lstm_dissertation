@@ -28,15 +28,6 @@ else:
 # # Glove embeddings
 # glove_embed_table =
 
-# ##### LOAD EMBEDDING #####
-# embeddings = True
-# embeddings_lstm = True
-# embed1 = torch.load('embeddings/embedding-8-7-22-13-f-.pt')
-# embed2 = torch.load('embeddings/embedding-9-7-0-15-g-.pt')
-# print("Embedding size: ", embed1.size())
-# embeddings_list = [embed1, embed2]
-
-# train_embeddings = not use_speaker_embed
 
 # %% LSTM Class
 
@@ -44,13 +35,13 @@ else:
 class LSTMPredictor(nn.Module):
 
     def __init__(self, lstm_settings_dict, feature_size_dict={'acous': 0, 'visual': 0},
-                 batch_size=32, seq_length=200, prediction_length=60, embedding_info=[],speaker_embed = False):
+                 batch_size=32, seq_length=200, prediction_length=60, embedding_info=[],  speaker_embed = False, embedding_for_size = torch.Tensor(), use_embeds_init=False):
         super(LSTMPredictor, self).__init__()
 
         # General model settings
         self.batch_size = batch_size
         self.seq_length = seq_length
-        self.feature_size_dict = feature_size_dict                 # self.num_feat_for_lstm in data_loader.py
+        self.feature_size_dict = feature_size_dict                 # self.num_feat_for_lstm in data_loader_s.py
         self.prediction_length = prediction_length
 
         # lstm_settings_dict
@@ -63,7 +54,13 @@ class LSTMPredictor(nn.Module):
         else:
             for act_mod in self.lstm_settings_dict['active_modalities']:
                 self.feature_size_dict['master'] += self.lstm_settings_dict['hidden_dims'][act_mod]
+
+        if speaker_embed:
+                self.feature_size_dict['master'] += embedding_for_size.size()[-1]  # !!!!!!!!
+
         self.num_layers = lstm_settings_dict['layers']
+
+        print("Master: ", self.feature_size_dict['master'])
 
         # embedding settings
         self.embedding_info = embedding_info
@@ -76,6 +73,7 @@ class LSTMPredictor(nn.Module):
 
         # my embedding settings
         self.speaker_embed = speaker_embed
+        self.use_embeds_init = use_embeds_init
 
         for modality in self.embedding_info.keys():
             self.embedding_flags[modality] = bool(len(self.embedding_info[modality]))
@@ -143,8 +141,8 @@ class LSTMPredictor(nn.Module):
             self.lstm_settings_dict['is_irregular']['master'] = False                                       # Master LSTM is regular (meaning 50
             self.lstm_dict['master'] = nn.LSTM(self.feature_size_dict['master'],
                                                self.lstm_settings_dict['hidden_dims']['master']).type(dtype)       # Multi-layer LSTM with one layer per element of input
-            print('Dims1: ', self.feature_size_dict['master'])
-            print('Dims2: ', self.lstm_settings_dict['hidden_dims']['master'])
+            # print('Dims1: ', self.feature_size_dict['master'])
+            # print('Dims2: ', self.lstm_settings_dict['hidden_dims']['master'])
             self.lstm_master = self.lstm_dict['master']
             for lstm in self.lstm_settings_dict['active_modalities']:
                 if self.lstm_settings_dict['is_irregular'][lstm]:
@@ -170,22 +168,44 @@ class LSTMPredictor(nn.Module):
             self.dropout_dict[drop_key] = nn.Dropout(drop_val)
             setattr(self,'dropout_'+str(drop_key),self.dropout_dict[drop_key])
 
+
+        ### Defined at end of forward() so shouldn't need this here
+        # if speaker_embed:
+        #     self.out = nn.Linear(2*self.lstm_settings_dict['hidden_dims']['master'], prediction_length).type(dtype)
+        # else:
         self.out = nn.Linear(self.lstm_settings_dict['hidden_dims']['master'], prediction_length).type(dtype)
+
+        self.embedding_transformer = nn.Linear(self.lstm_settings_dict['hidden_dims']['master'],20).type(dtype)
+
         self.init_hidden()
 
     def init_hidden(self):
         self.hidden_dict = {}
-        for lstm in self.lstm_dict.keys():     # per layer?
-            if self.lstm_settings_dict['is_irregular'][lstm]:        # ONLY ONE LAYER
-                self.hidden_dict[lstm] = (
-                Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype),
-                Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
-            else:
-                self.hidden_dict[lstm] = (Variable(
-                    torch.zeros(self.num_layers, self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(
-                    dtype), Variable(torch.zeros(
-                        self.num_layers, self.batch_size,self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
-            print(self.hidden_dict[lstm][0].size())
+
+        if not self.use_embeds_init:
+            for lstm in self.lstm_dict.keys():     # per layer?
+                if self.lstm_settings_dict['is_irregular'][lstm]:        # ONLY ONE LAYER
+                    self.hidden_dict[lstm] = (
+                    Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype),
+                    Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
+                else:
+                    self.hidden_dict[lstm] = (Variable(
+                        torch.zeros(self.num_layers, self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(
+                        dtype), Variable(torch.zeros(
+                            self.num_layers, self.batch_size,self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
+        else:
+            #### Code copied from just above, replace with code to load embeddings as starting hidden layers
+            for lstm in self.lstm_dict.keys():     # per layer?
+                if self.lstm_settings_dict['is_irregular'][lstm]:        # ONLY ONE LAYER
+                    self.hidden_dict[lstm] = (
+                    Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype),
+                    Variable(torch.zeros(self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
+                else:
+                    self.hidden_dict[lstm] = (Variable(
+                        torch.zeros(self.num_layers, self.batch_size, self.lstm_settings_dict['hidden_dims'][lstm])).type(
+                        dtype), Variable(torch.zeros(
+                            self.num_layers, self.batch_size,self.lstm_settings_dict['hidden_dims'][lstm])).type(dtype))
+            # print(self.hidden_dict[lstm][0].size())
 
     def change_batch_size_reset_states(self, batch_size):
         self.batch_size = int(batch_size)
@@ -217,6 +237,10 @@ class LSTMPredictor(nn.Module):
         nn.init.normal(self.out.weight.data, 0, init_std)
         nn.init.constant(self.out.bias, 0)
 
+        ##### Init embedding transformer here
+        nn.init.normal(self.embedding_transformer.weight, 0, init_std)
+        nn.init.constant(self.embedding_transformer.bias, 0)
+
         for lstm in self.lstm_dict.keys():                     # Assign values to the keys
             if self.lstm_settings_dict['is_irregular'][lstm]:
                 nn.init.normal(self.lstm_dict[lstm].weight_hh, 0, init_std)
@@ -235,15 +259,18 @@ class LSTMPredictor(nn.Module):
         embeds_two = []
 
         for emb_func_indx in range(len(self.embeddings[modality])):
+            debug1 = self.embeddings[modality][emb_func_indx](
+                Variable(in_data[:, :, self.embedding_indices[modality][emb_func_indx][0][0]:
+                                       self.embedding_indices[modality][emb_func_indx][0][1]] \
+                         .data.type(self.embed_data_types[modality][emb_func_indx])))
             embeds_one_tmp = self.embeddings[modality][emb_func_indx](
                 Variable(in_data[:, :, self.embedding_indices[modality][emb_func_indx][0][0]:
                                        self.embedding_indices[modality][emb_func_indx][0][1]] \
-                         .data.type(self.embed_data_types[modality][emb_func_indx]).squeeze()))
-
+                         .data.type(self.embed_data_types[modality][emb_func_indx]).squeeze(dim=2)))
             embeds_two_tmp = self.embeddings[modality][emb_func_indx](
                 Variable(in_data[:, :, self.embedding_indices[modality][emb_func_indx][1][0]:
                                        self.embedding_indices[modality][emb_func_indx][1][1]] \
-                         .data.type(self.embed_data_types[modality][emb_func_indx]).squeeze()))
+                         .data.type(self.embed_data_types[modality][emb_func_indx]).squeeze(dim=2)))
 
             if not (self.lstm_settings_dict['uses_master_time_rate'][modality]) and self.lstm_settings_dict['is_irregular'][modality]:
                 embeds_one_tmp = embeds_one_tmp.transpose(2,3)
@@ -269,32 +296,33 @@ class LSTMPredictor(nn.Module):
         return in_data
 
     def forward(self, in_data, embedding=None):          # Is this a single forward step, or is this all of the forward steps?
+        if embedding != None:
+            print("Embedding loaded.")
+
         print("Batch size: ", self.batch_size)
         x, i, h = {}, {}, {}
         h_list = []
+        hidden_list = []
         x['acous'], i['acous'], x['visual'], i['visual'] = in_data
 
-        ### Create concatenable tensors of embeddings
-        # embed1_concat_list = []
-        # embed2_concat_list = []
-        # for seq_indx in range(self.seq_length):
-        #     embed1_concat_list.append(embed1[0])         # check size, but when stacked, these should be (600, 1, 50)
-        #     embed2_concat_list.append(embed2[0])         # check size, but when stacked, these should be (600, 1, 50)
-        # # torch.stack(embed1_concat_list)
-        # # torch.stack(embed2_concat_list)
-        # embed1_concat_tensor = torch.stack(embed1_concat_list,0)
-        # embed2_concat_tensor = torch.stack(embed2_concat_list,0)
-
-        # print(embed1_concat_tensor.size(),embed2_concat_tensor[0].size())
-
+        ##### WHAT HAPPENS IF I CONCATENATE THE EMBEDDINGS TO THE MASTER LSTM HERE?
+        # print('Hidden dict:', self.hidden_dict['master'][0].size())
+        # if self.speaker_embed:
+        #     hidden_dict_master_temp = torch.cat([self.hidden_dict['master'][0],embedding[:1]],2)
+        #     cell_temp = self.hidden_dict['master'][1]
+        #     self.hidden_dict['master'] = (hidden_dict_master_temp,cell_temp)
 
         if not (self.lstm_settings_dict['no_subnets']):
+            # If saving embedding
+            mod_list = []
             for mod in self.lstm_settings_dict['active_modalities']:
                 if self.embedding_flags[mod]:
                     x[mod] = self.embedding_helper(x[mod], mod)
 
                 # Apply dropout input layers
                 x[mod] = self.dropout_dict[mod + '_in'](x[mod])
+
+                # print("Test", self.hidden_dict[mod][0].size())
 
                 cell_out_list = []
                 if not(self.lstm_settings_dict['is_irregular'][mod]) and self.lstm_settings_dict['uses_master_time_rate'][mod]:  # not is_irregular: Not asynch, ling&acous = 50ms; uses_master_time_rate: 50ms
@@ -339,7 +367,7 @@ class LSTMPredictor(nn.Module):
                                 self.hidden_dict[mod] = (h_l_copy, c_l_copy)
                                 # self.hidden_dict[mod][0][changed_indices] = h_l
                                 # self.hidden_dict[mod][1][changed_indices] = c_l
-                        cell_out_list.append(self.hidden_dict[mod][0])
+                        cell_out_list.append(self.hidden_dict[mod][0])         # Do NOT append embeddings to this. This is because there are multiple subnet cells between the master cells and this accumulates them
                     h[mod] = torch.stack(cell_out_list)
                 else:
                     raise ValueError('problem in forward pass')
@@ -349,23 +377,46 @@ class LSTMPredictor(nn.Module):
 
                 h_list.append(h[mod])
 
-            #############################
+                print("H", h[mod].size())
 
-            # print('Hidden dict:', self.hidden_dict['master'][0].size(),self.hidden_dict['master'][1].size())
+                hidden_list.append(self.hidden_dict[mod][0])
+                print("Hidden: ", hidden_list[-1].size())
 
-            lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](torch.cat(h_list,2),self.hidden_dict['master'])        # Puts the outputs of the sub-LSTM through the master LSTM, h_list being the hidden states from each of the modalities and hidden_dict['master'] being the hidden state from the previous master LSTM
+                # self.mod_embeddings.append(self.hidden_dict[mod][0])
+                mod_list.append(mod)
+                self.mod_list = mod_list
 
-            print("LSTM_out: ", lstm_out.size())
+            self.mod_embeddings = hidden_list
+
+            print("Num mod embeddings: ", len(self.mod_embeddings))
+
+            if self.speaker_embed:
+                try:
+                    if embedding.size()[1] != h_list[0].size()[1]:
+                        embedding = embedding.transpose(0,1)
+                        # embedding = embedding[:h_list[0].size()[1]]    # Implemented this in run_json
+                        embedding = embedding.transpose(0,1)
+                except AttributeError:
+                    pass
+                h_list.append(embedding)
+                cat = torch.cat(h_list, 2)
+            else:
+                cat = torch.cat(h_list, 2)
+                print("No embedding in model.")
+
+            ############################
+
+            print('Hidden dict pre-lstm master:', self.hidden_dict['master'][0].size(),self.hidden_dict['master'][1].size())
+
+            lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](cat,self.hidden_dict['master'])        # Puts the outputs of the sub-LSTM through the master LSTM, h_list being the hidden states from each of the modalities and hidden_dict['master'] being the hidden state from the previous master LSTM
+
+            # print(embedding.size())
             print("Hidden dict transformed: ", self.hidden_dict['master'][0].size())
+            #### Try attaching the embededing to self.hidden_dict['master'][0] here ^^^ (without having done the 600 loop in run_json.py
 
             lstm_out = self.dropout_dict['master_out'](lstm_out)
+            print("LSTM_out: ", lstm_out.size())
 
-            ## Training embeddings
-            if self.speaker_embed:
-
-                lstm_out = torch.cat((lstm_out,embedding), 2)      # Treats each embedding as extra features ........ # a frame in tbptt; could also concatenate the lists created above along the 2nd dimension (1) and input the embeddings at each frame
-
-                print("Embeddings attached to lstm_out.")
 
         else:  # For no subnets...
             print("No subnets")
@@ -377,11 +428,14 @@ class LSTMPredictor(nn.Module):
                 x[mod] = self.embedding_helper(x[mod], mod)
 
             x[mod] = self.dropout_dict['master_in'](x[mod])
+            if self.speaker_embed:
+                x[mod] = [x[mod],embedding]
+                x[mod] = torch.cat(x[mod],2)
 
             cell_out_list = []
             # get outputs of lstm['acous']
             # print("LSTM, ", lstm_out.size())
-            print("Hidden, ", self.hidden_dict['master'][0].size(), self.hidden_dict['master'][1].size())
+            # print("Hidden, ", self.hidden_dict['master'][0].size(), self.hidden_dict['master'][1].size())
             if not (self.lstm_settings_dict['is_irregular'][mod]) and \
                     self.lstm_settings_dict['uses_master_time_rate'][mod]:
                 lstm_out, self.hidden_dict['master'] = self.lstm_dict['master'](x[mod], self.hidden_dict['master'])        # self.hidden_dict['master'] on the right is a tuple of the input hidden and cell states; on the right is the output hidden and cell states
@@ -440,12 +494,48 @@ class LSTMPredictor(nn.Module):
 
             lstm_out = self.dropout_dict[str(mod)+'_out'](lstm_out)
 
+        ## Concatenating embeddings
+
         # sigmoid_out = F.sigmoid(self.out(lstm_out))
         #Take stacked, dropout-ed hidden layers and run them through a linear layer
+
+        if not self.speaker_embed:
+            self.embedding = self.hidden_dict['master'][0]
+            # self.embedding = lstm_out
+            # self.embedding = self.embedding_transformer(self.hidden_dict['master'][0])
+
+            # Add a step that trains the embedding transformer: need to change the size expected by self.out, then
+            # perform self.out on self.embedding to get the prediction
+
+            print("Embedding size: ", self.embedding.size())
+
         sigmoid_out = self.out(lstm_out)
 
-        print("Final size: ", sigmoid_out.size())
-
-        # torch.save(hidden_return, 'embeddings/embedding-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute))  # DO NOT USE
-
         return sigmoid_out
+
+
+
+
+
+
+
+
+
+
+
+### All of this used to be between Concatenate embeddings and sigmoid_out, but I wasn't using it and was annoying me
+
+# if self.speaker_embed and type(lstm_out) == torch.Tensor:
+        #     try:
+        #         lstm_out = torch.cat((lstm_out, embedding),2)  # Treats each embedding as extra features ........ # a frame in tbptt; could also concatenate the lists created above along the 2nd dimension (1) and input the embeddings at each frame
+        #     except TypeError:
+        #         self.speaker_embed = False
+
+        # if self.speaker_embed:
+        #     self.out = nn.Linear(2 * self.lstm_settings_dict['hidden_dims']['master'], self.prediction_length).type(
+        #         dtype)
+        #     print("Embeddings attached to lstm_out.")
+        # else:
+        #     self.out = nn.Linear(self.lstm_settings_dict['hidden_dims']['master'], self.prediction_length).type(dtype)
+        #
+        #     print("Output size with embedding: ", lstm_out.size())

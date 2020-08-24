@@ -23,9 +23,11 @@ now = datetime.now()
 seq_length = 600
 no_subnets = False
 
-experiment_top_path = './two_subnets-{}-{}-{}-{}.pt'.format(now.day, now.month, now.hour, now.minute)
-py_env =  '/afs/inf.ed.ac.uk/user/s19/s1983536/miniconda3/bin/python'
+prediction_length_num = 60
 
+experiment_top_path = './train_60pred_Ffeatures_mods_hidden_baseline' #.format(prediction_length_num)      # {}-{}-{}-{}'.format(now.day, now.month, now.hour, now.minute)
+py_env =  '/afs/inf.ed.ac.uk/user/s19/s1983536/miniconda3/bin/python'
+fg_features = 'f'
 
 # plat = platform.linux_distribution()[0]
 # plat = 'not_arch'
@@ -44,10 +46,13 @@ num_epochs = 1500
 early_stopping = True
 patience = 10
 slow_test = True
-train_list_path = './data/splits/training.txt'
-test_list_path = './data/splits/testing.txt'
-# train_list_path = './data/splits/training_dev_small.txt'
-# test_list_path = './data/splits/testing_dev_small.txt'
+train_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/split0/training.txt'
+test_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/split0/testing_dev_small.txt'
+# test_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/q3ec1f/fg_testing.txt'
+# test_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/q3ec1g/g_training.txt'
+# train_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/q3ec1g/g_testing_dev.txt'
+# train_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/training_dev_small.txt'
+# train_list_path = '/group/project/cstr1/mscslp/2019-20/s1983536_Lena_Smith/data/splits/q3ec1f/fg_training.txt'
 
 # %% Experiment settings
 
@@ -165,31 +170,37 @@ Acous_10ms_Ling_10ms = {
 
 # %% Experiments list
 
-gpu_select = 0
+gpu_select = 1
 test_indices = [0,1,2]
 
 ### Backup: extra experiments
 ### '1_Acous_50ms_Ling_50ms', feat_dicts.gemaps_50ms_dict_list + feat_dicts.word_reg_dict_list_visual, Acous_50ms_Ling_50ms,
 ### '5_Acous_10ms_Ling_10ms', feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_reg_dict_list_10ms_visual, Acous_10ms_Ling_10ms
 ### '3_Acous_50ms_Ling_Asynch',  feat_dicts.gemaps_50ms_dict_list + feat_dicts.word_irreg_fast_dict_list,  Acous_50ms_Ling_Asynch,
+### '4_Acous_10ms_Ling_Asynch', feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_irreg_fast_dict_list,  Acous_10ms_Ling_Asynch
 experiment_name_list = [
-    '2_Acous_10ms_Ling_50ms',
-    '4_Acous_10ms_Ling_Asynch'
-]
+    '2_Acous_10ms_Ling_50ms'
+]        # Should end up with 3 embeddings for each of these? So if I use the first and last ones generated, those will be for each one of these respectively
 
 experiment_features_lists = [
-    feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_reg_dict_list_visual,
-    feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_irreg_fast_dict_list
+    feat_dicts.gemaps_10ms_dict_list + feat_dicts.word_reg_dict_list_visual
 ]
 
 experiment_settings_list = [
-    Acous_10ms_Ling_50ms,
-    Acous_10ms_Ling_Asynch
+    Acous_10ms_Ling_50ms
 ]
 
-eval_metric_list = ['f_scores_50ms', 'f_scores_250ms', 'f_scores_500ms', 'train_losses',
-                    'test_losses', 'test_losses_l1']
-# 'f_scores_overlap_hold_shift','f_scores_overlap_hold_shift_exclusive', 'f_scores_short_long',
+#
+#q1ec2
+# foldername_list = ['q3ec1f', 'q3ec1f', 'q3ec1f', 'q3ec1f','q3ec1g', 'q3ec1g', 'q3ec1g', 'q3ec1g', 'q4ec1f', 'q4ec1f', 'q4ec1f', 'q4ec1f','q4ec1g', 'q4ec1g', 'q4ec1g', 'q4ec1g', 'q5ec2f', 'q5ec2f', 'q5ec2f', 'q5ec2f','q5ec2g', 'q5ec2g', 'q5ec2g', 'q5ec2g']
+# filename_list = [('f_training.txt','f_testing_dev.txt'), ('g_training.txt','g_testing_dev.txt'), ('fg_training.txt','fg_testing.txt'), ('f_testing_dev.txt','f_training.txt'), ('g_testing_dev.txt','g_training.txt'),('fg_testing.txt','fg_training.txt')]*6
+# flipped_list = [False, False,False,True ,True, True]*6
+# fg_features_list = ['f','g','fg','f','g','fg']*6
+# prediction_length_list = [prediction_length_num]*36
+
+
+eval_metric_list = ['f_scores_50ms', 'f_scores_250ms', 'f_scores_500ms', 'test_losses', 'train_losses', 'f_scores_short_long', 'test_losses_l1','f_scores_overlap_hold_shift','f_scores_overlap_hold_shift_exclusive']
+
 
 if not (os.path.exists(experiment_top_path)):
     os.mkdir(experiment_top_path)
@@ -198,7 +209,15 @@ if not (os.path.exists(experiment_top_path)):
 def run_trial(parameters):
     experiment_name, experiment_features_list, exp_settings = parameters
 
-    trial_path = experiment_top_path + experiment_name
+    # foldername, filename, flipped, fg_features, prediction_length
+
+    # experiment_name += '_' + foldername + '_' + str(int(flipped)) + '_' + fg_features + '_' + str(prediction_length)
+
+    # trial_path = experiment_top_path + experiment_name
+
+    # test_path = trial_path + '/test/'
+
+    trial_path = experiment_top_path + '/' + experiment_name
 
     test_path = trial_path + '/test/'
 
@@ -240,6 +259,8 @@ def run_trial(parameters):
         if not (os.path.exists(os.path.join(test_path, name_append_test))) and not (
         os.path.exists(os.path.join(test_path, name_append_test, 'results.p'))):
             json_dict = {'feature_dict_list': experiment_features_list,
+                         'fg_features': fg_features,
+                         'prediction_length' : prediction_length_num,
                          'results_dir': test_path,
                          'name_append': name_append_test,
                          'no_subnets': no_subnets,
@@ -309,11 +330,31 @@ def run_trial(parameters):
 
         # get average and lists
         for eval_metric in eval_metric_list:
-            best_vals_dict[eval_metric] += float(test_results[eval_metric][best_loss_indx]) * (
+            # print(len(test_results[eval_metric]))
+            try:
+                best_vals_dict[eval_metric] += float(test_results[eval_metric][0]) * (
                         1.0 / float(len(test_indices)))
-            last_vals_dict[eval_metric] += float(test_results[eval_metric][-1]) * (1.0 / float(len(test_indices)))
-            best_vals_dict_array[eval_metric].append(float(test_results[eval_metric][best_loss_indx]))
-            best_fscore_array[eval_metric].append(float(np.amax(test_results[eval_metric])))
+            except IndexError:
+                print(eval_metric)
+                print("BEM {}".format(best_vals_dict[eval_metric] ))
+                print("trem {}".format(test_results[eval_metric]))
+                print('ind {}'.format(len(test_indices)))
+                quit()
+            try:
+                last_vals_dict[eval_metric] += float(test_results[eval_metric][-1]) * (1.0 / float(len(test_indices)))
+            except IndexError:
+                print("No Last Vals {}".format(eval_metric))
+                quit()
+            try:
+                best_vals_dict_array[eval_metric].append(float(test_results[eval_metric][best_loss_indx]))
+            except IndexError:
+                print("bvda", eval_metric)
+                quit()
+            try:
+                best_fscore_array[eval_metric].append(float(np.amax(test_results[eval_metric])))
+            except IndexError:
+                print('F score array', eval_metric)
+                quit()
 
     report_dict = {'experiment_name': experiment_name,
                    'best_vals': best_vals_dict,
@@ -328,6 +369,12 @@ def run_trial(parameters):
                    'selected_master_node_size': int(best_master_node_size)
                    }
 
+    report_dict_list = ['experiment_name', 'best_vals', 'last_vals', 'best_vals_array', 'best_fscore_array', 'best_fscore_500_average', 'best_test_loss_average', 'best_indx', 'num_epochs_total', 'selected_lr', 'selected_master_node_size']
+
+    for val in report_dict_list:
+        if val not in list(report_dict.keys()):
+            report_dict[val] = 'placeholder'
+
     json.dump(report_dict, open(trial_path + '/report_dict.json', 'w'), indent=4, sort_keys=True)
 
 
@@ -337,14 +384,21 @@ def run_trial(parameters):
 
 param_list = []
 for experiment_name, experiment_features_list, experiment_settings in zip(experiment_name_list,
-                                                                          experiment_features_lists,
-                                                                          experiment_settings_list):
+                                                                        experiment_features_lists,
+                                                                        experiment_settings_list):
     param_list.append([experiment_name, experiment_features_list, experiment_settings])
+
+print("List: ", param_list)
+
+# foldername, filename, flipped, fg_features, prediction_length
+# foldername_list,filename_list,flipped_list,fg_features_list,prediction_length_list
+# , foldername, filename, flipped, fg_features, prediction_length
+
+
+
 
 # if __name__=='__main__':
 #    p = multiprocessing.Pool(num_workers)
-#    p.map(run_trial,param_list)   
+#    p.map(run_trial,param_list)
 for params in param_list:
     run_trial(params)
-
-
